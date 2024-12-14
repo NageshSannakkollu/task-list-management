@@ -6,8 +6,12 @@ const sqlite3 = require("sqlite3")
 const {open} = require("sqlite")
 const bcrypt = require("bcrypt")
 const jwt = require("jsonwebtoken")
+
 app.use(express.json())
 app.use(cors())
+
+// const localJwt = localStorage.getItem('jwtToken');
+// console.log('localJwt:',localJwt)
 
 
 const dbPath = path.join(__dirname,'userDatabase.db')
@@ -21,6 +25,7 @@ const initializeDBAndServer = async() => {
         })
         app.listen(port,()=>{
         console.log(`Server Running at:http://localhost:${port}/`)
+        
     })
     } catch (error) {
         console.log("DB Error at:",error)
@@ -40,7 +45,6 @@ app.post("/api/auth/register", async (request, response) => {
     response.status(400);
     response.send("User already exists");
   } else {
-    
     const checkPasswordLength = password.length > 6;
     const encryptedPassword = await bcrypt.hash(password, 10);
     // console.log(checkPasswordLength);
@@ -69,6 +73,7 @@ app.post("/api/auth/login", async (request, response) => {
   const { username, password } = request.body;
   const getUserInfo = `SELECT * FROM Users WHERE username='${username}';`;
   const userResponse = await db.get(getUserInfo);
+  // console.log(userResponse);
   if (userResponse === undefined) {
     response.status(400);
     response.send("Invalid user");
@@ -101,7 +106,7 @@ const authenticateToken = (request, response, next) => {
     response.status(401);
     response.send("Invalid JWT Token");
   } else {
-    jwt.verify(jwtToken, "My_Secret_Key", async (error, payload) => {
+    jwt.verify(jwtToken, process.env.JWT_TOKEN, async (error, payload) => {
       if (error) {
         response.status(401);
         response.send("Invalid JWT Token");
@@ -132,22 +137,23 @@ app.post("/api/tasks",async(request,response) => {
     // console.log(upperStatus)
 
     const checkTaskName = `SELECT * FROM Tasks WHERE title='${title}';`;
-    if(checkTaskName === undefined){
-        response.status(400);
-        response.send("Task already exist")
-    }
-    const addTaskQuery = `INSERT INTO Tasks(user_id,title,description,status) VALUES(${user_id},'${title}','${description}','${upperStatus}');`;
-    const addTaskQueryResponse = await db.run(addTaskQuery);
-    const taskId = addTaskQueryResponse.lastID;
-    response.send(`Task added Successfully with ID: ${taskId}`);
+    const checkTaskNameResponse = await db.get(checkTaskName);
+    // console.log(checkTaskNameResponse)
+    if(checkTaskNameResponse !== undefined){
+        response.status(400).send("Task already exist");
+    }else{
+      const addTaskQuery = `INSERT INTO Tasks(user_id,title,description,status) VALUES(${user_id},'${title}','${description}','${upperStatus}');`;
+      const addTaskQueryResponse = await db.run(addTaskQuery);
+      const taskId = addTaskQueryResponse.lastID;
+      response.send(`Task added Successfully with ID: ${taskId}`);
+    }    
 })
 
 //Get all Tasks 
 
 app.get("/api/tasks",async(request,response) => {
-    const {status,search_q=""} = request.query;
-    console.log(status)
-    const getAllTasksRequest = `SELECT * FROM Tasks;`;
+    const {title,search_q=""} = request.query;
+    const getAllTasksRequest = `SELECT * FROM Tasks`;
     const getAllTasksResponse = await db.all(getAllTasksRequest)
     response.send(getAllTasksResponse);
 })
@@ -166,7 +172,6 @@ app.get("/api/tasks/:id",async(request,response) => {
         response.send(getSingleTasksResponse)
     }
 })
-
 //Update Task 
 
 app.put("/api/tasks/:id",async(request,response) => {
